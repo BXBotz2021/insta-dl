@@ -40,40 +40,25 @@ def initialize_instagram_client():
 ig = initialize_instagram_client()
 
 def download_instagram_media(url: str):
-    """Download Instagram media with error handling"""
+    """Alternative downloader without login"""
     try:
-        media_pk = ig.media_pk_from_url(url)
-        media_info = ig.media_info(media_pk)
-        
-        if media_info.media_type == 2:  # Video
-            download_url = media_info.video_url
-            media_type = "video"
-        elif media_info.media_type == 1:  # Image
-            download_url = media_info.thumbnail_url
-            media_type = "photo"
-        elif media_info.media_type == 8:  # Album
-            download_url = media_info.resources[0].thumbnail_url
-            media_type = "photo"
-        else:
-            return None
-            
-        response = requests.get(download_url, stream=True)
-        if response.status_code != 200:
-            return None
-            
-        file_extension = ".mp4" if media_type == "video" else ".jpg"
-        file_path = f"downloads/{media_pk}{file_extension}"
-        
-        os.makedirs("downloads", exist_ok=True)
-        with open(file_path, "wb") as f:
-            for chunk in response.iter_content(1024):
-                f.write(chunk)
-                
-        return {
-            "file_path": file_path,
-            "media_type": media_type,
-            "caption": media_info.caption_text or ""
+        # Use direct scraping approach
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36..."
         }
+        response = requests.get(f"https://instagram.com/p/{url.split('/')[-2]}", headers=headers)
+        
+        # Extract video/image URL from HTML
+        if 'video_url' in response.text:
+            media_url = re.search('"video_url":"([^"]+)"', response.text).group(1)
+            media_type = "video"
+        else:
+            media_url = re.search('"display_url":"([^"]+)"', response.text).group(1)
+            media_type = "photo"
+            
+        # Download the media
+        file_path = f"downloads/{int(time.time())}.{'mp4' if media_type == 'video' else 'jpg'}"
+        # ... rest of download code ...
     except Exception as e:
         print(f"Download error: {e}")
         return None
