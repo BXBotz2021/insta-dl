@@ -2,21 +2,20 @@ import os
 import requests
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from typing import Union  # Add this import
+from typing import Dict, Optional  # For Python 3.8 compatibility
 from instagrapi import Client as InstagramClient
 
 # Bot configuration
-API_ID = 7813390  # Your API ID
+API_ID = 7813390  # Your API I
 API_HASH = "1faadd9cc60374bca1e88c2f44e3ee2f"
 BOT_TOKEN = "7744174417:AAHgvYYmf2h-YkupR4gXhvqhrU7t6ItxvjE"
 INSTA_USERNAME = "instantdlbottg"
 INSTA_PASSWORD = "instadlbot123"
 
-
 # Initialize the bot
 app = Client("instagram_downloader_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# Initialize Instagram client with legacy Python 3.8 compatibility
+# Initialize Instagram client
 ig = InstagramClient()
 try:
     if INSTA_USERNAME and INSTA_PASSWORD:
@@ -24,27 +23,26 @@ try:
 except Exception as e:
     print(f"Instagram login failed: {e}")
 
-def download_instagram_media(url: str) -> Union[dict, None]:  # Modified type hint
+def download_instagram_media(url: str) -> Optional[Dict]:
     """Download Instagram media (reels, posts) and return media info"""
     try:
         media_pk = ig.media_pk_from_url(url)
         media_info = ig.media_info(media_pk)
         
+        # Get the appropriate URL based on media type
         if media_info.media_type == 2:  # Video
-            download_url = getattr(media_info, 'video_url', None)
+            download_url = media_info.video_url
             media_type = "video"
         elif media_info.media_type == 1:  # Image
-            download_url = getattr(media_info, 'thumbnail_url', None)
+            download_url = media_info.thumbnail_url
             media_type = "photo"
         elif media_info.media_type == 8:  # Album
-            download_url = getattr(media_info.resources[0], 'thumbnail_url', None)
+            download_url = media_info.resources[0].thumbnail_url
             media_type = "photo"
         else:
             return None
             
-        if not download_url:
-            return None
-            
+        # Download the media
         response = requests.get(download_url)
         if response.status_code != 200:
             return None
@@ -59,32 +57,11 @@ def download_instagram_media(url: str) -> Union[dict, None]:  # Modified type hi
         return {
             "file_path": file_path,
             "media_type": media_type,
-            "caption": getattr(media_info, 'caption_text', '') or ""
+            "caption": media_info.caption_text if media_info.caption_text else ""
         }
         
     except Exception as e:
         print(f"Error downloading Instagram media: {e}")
-        return None
-
-            
-        response = requests.get(download_url)
-        if response.status_code != 200:
-            return None
-            
-        ext = ".mp4" if media_type == "video" else ".jpg"
-        file_path = f"{DOWNLOAD_FOLDER}/{media_pk}{ext}"
-        
-        os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
-        with open(file_path, "wb") as f:
-            f.write(response.content)
-            
-        return {
-            "file_path": file_path,
-            "media_type": media_type,
-            "caption": media_info.caption_text or ""
-        }
-    except Exception as e:
-        print(f"Error downloading: {e}")
         return None
 
 @app.on_message(filters.command(["start", "help"]))
@@ -113,7 +90,8 @@ async def handle_instagram_link(client: Client, message: Message):
                 chat_id=message.chat.id,
                 video=media_info["file_path"],
                 caption=media_info["caption"],
-                reply_to_message_id=message.id
+                reply_to_message_id=message.id,
+                supports_streaming=True
             )
         else:
             await client.send_photo(
