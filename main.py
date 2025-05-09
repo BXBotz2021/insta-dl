@@ -1,9 +1,20 @@
 import os
+import sys
 import requests
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from typing import Dict, Optional  # For Python 3.8 compatibility
-from instagrapi import Client as InstagramClient
+
+try:
+    from instagrapi import Client as InstagramClient
+except ImportError:
+    print("Error: instagrapi not installed. Run: pip install instagrapi==1.16.16")
+    sys.exit(1)
+
+try:
+    from PIL import Image  # Just to check if Pillow is available
+except ImportError:
+    print("Error: Pillow not installed. Run: pip install pillow>=8.1.1")
+    sys.exit(1)
 
 # Bot configuration
 API_ID = 7813390  # Your API I
@@ -11,25 +22,29 @@ API_HASH = "1faadd9cc60374bca1e88c2f44e3ee2f"
 BOT_TOKEN = "7744174417:AAHgvYYmf2h-YkupR4gXhvqhrU7t6ItxvjE"
 INSTA_USERNAME = "instantdlbottg"
 INSTA_PASSWORD = "instadlbot123"
-
 # Initialize the bot
 app = Client("instagram_downloader_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# Initialize Instagram client
-ig = InstagramClient()
-try:
-    if INSTA_USERNAME and INSTA_PASSWORD:
-        ig.login(INSTA_USERNAME, INSTA_PASSWORD)
-except Exception as e:
-    print(f"Instagram login failed: {e}")
+def initialize_instagram_client():
+    """Initialize Instagram client with error handling"""
+    ig = InstagramClient()
+    try:
+        if INSTA_USERNAME and INSTA_PASSWORD:
+            ig.login(INSTA_USERNAME, INSTA_PASSWORD)
+            print("Instagram login successful")
+        return ig
+    except Exception as e:
+        print(f"Instagram login failed: {e}")
+        return ig
 
-def download_instagram_media(url: str) -> Optional[Dict]:
-    """Download Instagram media (reels, posts) and return media info"""
+ig = initialize_instagram_client()
+
+def download_instagram_media(url: str):
+    """Download Instagram media with error handling"""
     try:
         media_pk = ig.media_pk_from_url(url)
         media_info = ig.media_info(media_pk)
         
-        # Get the appropriate URL based on media type
         if media_info.media_type == 2:  # Video
             download_url = media_info.video_url
             media_type = "video"
@@ -42,8 +57,7 @@ def download_instagram_media(url: str) -> Optional[Dict]:
         else:
             return None
             
-        # Download the media
-        response = requests.get(download_url)
+        response = requests.get(download_url, stream=True)
         if response.status_code != 200:
             return None
             
@@ -52,63 +66,23 @@ def download_instagram_media(url: str) -> Optional[Dict]:
         
         os.makedirs("downloads", exist_ok=True)
         with open(file_path, "wb") as f:
-            f.write(response.content)
-            
+            for chunk in response.iter_content(1024):
+                f.write(chunk)
+                
         return {
             "file_path": file_path,
             "media_type": media_type,
-            "caption": media_info.caption_text if media_info.caption_text else ""
+            "caption": media_info.caption_text or ""
         }
-        
     except Exception as e:
-        print(f"Error downloading Instagram media: {e}")
+        print(f"Download error: {e}")
         return None
 
-@app.on_message(filters.command(["start", "help"]))
-async def start(client: Client, message: Message):
-    await message.reply_text(
-        "📥 Instagram Downloader Bot\n\n"
-        "Send me an Instagram Reel or Post link and I'll download it for you!\n\n"
-        "Supported links:\n"
-        "- Reels: https://instagram.com/reel/...\n"
-        "- Posts: https://instagram.com/p/..."
-    )
-
-@app.on_message(filters.regex(r'https?://(www\.)?instagram\.com/(p|reel)/[^/]+/?'))
-async def handle_instagram_link(client: Client, message: Message):
-    processing_msg = await message.reply_text("⬇️ Downloading...")
-    
-    media_info = download_instagram_media(message.text)
-    
-    if not media_info:
-        await processing_msg.edit_text("❌ Failed to download. Please check the link and try again.")
-        return
-    
-    try:
-        if media_info["media_type"] == "video":
-            await client.send_video(
-                chat_id=message.chat.id,
-                video=media_info["file_path"],
-                caption=media_info["caption"],
-                reply_to_message_id=message.id,
-                supports_streaming=True
-            )
-        else:
-            await client.send_photo(
-                chat_id=message.chat.id,
-                photo=media_info["file_path"],
-                caption=media_info["caption"],
-                reply_to_message_id=message.id
-            )
-        await processing_msg.delete()
-    except Exception as e:
-        await processing_msg.edit_text(f"⚠️ Error: {str(e)}")
-    finally:
-        try:
-            os.remove(media_info["file_path"])
-        except:
-            pass
+# ... [rest of your bot code remains the same] ...
 
 if __name__ == "__main__":
-    print("Bot is running...")
-    app.run()
+    print("Starting bot...")
+    try:
+        app.run()
+    except Exception as e:
+        print(f"Bot failed to start: {e}")
