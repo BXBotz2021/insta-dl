@@ -1,11 +1,11 @@
 # Telegram API
-API_ID = 123456  # From my.telegram.org
-API_HASH = "your_api_hash_here"  # From my.telegram.org
-BOT_TOKEN = "your_bot_token_here"  # From @BotFather
+API_ID = 7813390  # From my.telegram.org
+API_HASH = "1faadd9cc60374bca1e88c2f44e3ee2f"  # From my.telegram.org
+BOT_TOKEN = "7744174417:AAHgvYYmf2h-YkupR4gXhvqhrU7t6ItxvjE"  # From @BotFather
 
 # Instagram (optional)
-INSTA_USERNAME = "your_insta_username"
-INSTA_PASSWORD = "your_insta_password"
+INSTA_USERNAME = "instantdlbottg"
+INSTA_PASSWORD = "instadlbot123"
 
 # Settings
 DOWNLOAD_FOLDER = "downloads"
