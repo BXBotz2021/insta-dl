@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import requests
 import time
 from pyrogram import Client, filters
@@ -88,6 +89,47 @@ def extract_alternative(html: str) -> dict:
     except:
         return None
 
+def get_instagram_media(url: str) -> dict:
+    """Get media URL using Instagram's GraphQL API"""
+    try:
+        # Extract shortcode from URL
+        if '/reel/' in url:
+            shortcode = url.split("/reel/")[1].split("/")[0].split("?")[0]
+        elif '/p/' in url:
+            shortcode = url.split("/p/")[1].split("/")[0].split("?")[0]
+        else:
+            return None
+        
+        # GraphQL API endpoint
+        api_url = f"https://www.instagram.com/graphql/query/?query_hash=b3055c01b4b222b8a47dc12b090e4e64&variables=%7B%22shortcode%22%3A%22{shortcode}%22%7D"
+        
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "X-Requested-With": "XMLHttpRequest"
+        }
+        
+        response = requests.get(api_url, headers=headers)
+        data = json.loads(response.text)
+        
+        # Extract media URL
+        media = data['data']['shortcode_media']
+        if media.get('is_video'):
+            return {
+                "url": media['video_url'],
+                "type": "video",
+                "source": "api"
+            }
+        else:
+            return {
+                "url": media['display_url'],
+                "type": "photo",
+                "source": "api"
+            }
+        
+    except Exception as e:
+        print(f"API Error: {e}")
+        return None
+
 def download_media(media_url: str, media_type: str) -> str:
     """Improved downloader with timeout and chunked download"""
     try:
@@ -109,7 +151,7 @@ def download_media(media_url: str, media_type: str) -> str:
         
     except Exception as e:
         print(f"Download failed: {str(e)}")
-        if os.path.exists(file_path):
+        if 'file_path' in locals() and os.path.exists(file_path):
             os.remove(file_path)
         return None
 
@@ -130,7 +172,13 @@ async def handle_instagram_link(client: Client, message: Message):
     processing_msg = await message.reply_text("🔍 Processing your link...")
     
     try:
-        media_info = extract_instagram_media(message.text)
+        # First try the API method
+        media_info = get_instagram_media(message.text)
+        
+        # If API fails, try scraping method
+        if not media_info:
+            media_info = extract_instagram_media(message.text)
+            
         if not media_info:
             await processing_msg.edit_text("❌ Couldn't download. Possible reasons:\n"
                                          "1. Link is private\n"
@@ -139,7 +187,7 @@ async def handle_instagram_link(client: Client, message: Message):
                                          "Try again later or send a different link.")
             return
 
-        await processing_msg.edit_text("⬇️ Downloading media...")
+        await processing_msg.edit_text(f"⬇️ Downloading media ({media_info['source']} method)...")
         file_path = download_media(media_info["url"], media_info["type"])
         
         if not file_path:
