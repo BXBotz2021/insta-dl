@@ -1,4 +1,4 @@
-
 pyrogram>=2.0.0
-instagrapi==1.16.16  # Older version that might work better
+instagrapi==1.16.16
 requests>=2.28.0
+pillow>=8.1.1
