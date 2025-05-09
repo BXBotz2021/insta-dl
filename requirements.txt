@@ -1,4 +1,4 @@
+
 pyrogram>=2.0.0
-instagrapi>=1.16.0
+instagrapi==1.16.16  # Older version that might work better
 requests>=2.28.0
-python-dotenv>=0.21.0
