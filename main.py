@@ -31,6 +31,8 @@ async def download_yt(_, msg):
         ydl_opts = {
             'format': 'best[ext=mp4]',
             'outtmpl': 'downloads/%(title)s.%(ext)s',
+            'cookiefile': 'cookies.txt',  # use YouTube cookies for restricted videos
+            'age_limit': 18
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
