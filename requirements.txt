@@ -1,5 +1,5 @@
-pyrogram>=2.0.106
-tgcrypto>=1.2.5
-yt-dlp>=2024.3.10
-requests>=2.31.0
-pillow>=10.2.0  # For thumbnail handling
+pyrogram==2.0.106
+tgcrypto==1.2.5
+yt-dlp==2025.05.22
+requests==2.31.0
+pillow==10.2.0  # For thumbnail handling
