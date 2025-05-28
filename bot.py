@@ -41,7 +41,7 @@ def get_video_info(url):
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
-        'extract_flat': True,
+        'extract_flat': False,  # Changed to False to get full video info
         'cookiefile': COOKIES_FILE if os.path.exists(COOKIES_FILE) else None,
         'format': 'best',
         'nocheckcertificate': True,
@@ -49,6 +49,8 @@ def get_video_info(url):
         'no_color': True,
         'noprogress': True,
         'allow_unplayable_formats': False,
+        'youtube_include_dash_manifest': False,
+        'geo_bypass': True,
         'extractor_args': {
             'youtube': {
                 'skip': ['dash', 'hls'],
@@ -56,16 +58,37 @@ def get_video_info(url):
             }
         },
         'socket_timeout': 30,
-        'retries': 5,
+        'retries': 3,
         'user_agent': get_random_user_agent(),
-        'referer': 'https://www.youtube.com/'
+        'referer': 'https://www.youtube.com/',
+        'http_headers': {
+            'User-Agent': get_random_user_agent(),
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-us,en;q=0.5',
+            'Sec-Fetch-Mode': 'navigate'
+        }
     }
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            return ydl.extract_info(url, download=False)
+            try:
+                info = ydl.extract_info(url, download=False)
+                if info is None:
+                    raise Exception("Failed to extract video information")
+                return info
+            except yt_dlp.utils.DownloadError as e:
+                if "Sign in" in str(e):
+                    raise Exception("This video requires authentication. Please provide a valid cookies.txt file.")
+                elif "Private video" in str(e):
+                    raise Exception("This video is private.")
+                elif "This video is not available" in str(e):
+                    raise Exception("This video is not available in your region or has been removed.")
+                else:
+                    raise Exception(f"Download error: {str(e)}")
+            except Exception as e:
+                raise Exception(f"An error occurred: {str(e)}")
     except Exception as e:
-        print(f"Error extracting info: {str(e)}")
+        print(f"Error in get_video_info: {str(e)}")
         return None
 
 def get_random_user_agent():
@@ -164,7 +187,16 @@ async def youtube_link_handler(_, message: Message):
         
         info = get_video_info(url)
         if not info:
-            return await status_msg.edit_text("❌ Failed to fetch video information. Please check the URL and try again.")
+            error_text = (
+                "❌ Failed to fetch video information.\n\n"
+                "Possible reasons:\n"
+                "• Video is private\n"
+                "• Video is age-restricted (need cookies.txt)\n"
+                "• Video is not available in your region\n"
+                "• Invalid or broken URL\n\n"
+                "Please check the URL and try again."
+            )
+            return await status_msg.edit_text(error_text)
         
         title = info.get('title', 'Video')
         duration = info.get('duration')
@@ -182,7 +214,14 @@ async def youtube_link_handler(_, message: Message):
             reply_markup=get_format_buttons(formats)
         )
     except Exception as e:
-        await message.reply_text(f"❌ Error: {str(e)}")
+        error_msg = str(e)
+        if "cookies.txt" in error_msg:
+            await message.reply_text(
+                "❌ This video requires authentication.\n"
+                "Please provide a valid cookies.txt file to download age-restricted content."
+            )
+        else:
+            await message.reply_text(f"❌ Error: {error_msg}")
 
 @bot.on_callback_query(filters.regex("^help$"))
 async def help_callback(_, query: CallbackQuery):
