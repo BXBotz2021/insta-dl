@@ -16,7 +16,6 @@ API_ID = 7813390  # Replace with your API_ID
 API_HASH = "1faadd9cc60374bca1e88c2f44e3ee2f"  # Replace with your API_HASH
 BOT_TOKEN = "8132280304:AAHK129IwpEdLgHH1ORN4DbeHazBd0mtkE0"  # Replace with your bot token
 
-
 MAX_FILE_SIZE = 2000  # 2GB in MB (Telegram limit)
 COOKIES_FILE = "cookies.txt"  # Path to cookies file
 DOWNLOAD_DIR = "downloads"
@@ -38,87 +37,104 @@ def humanbytes(size):
     return f"{size:.2f} {units[i]}"
 
 def get_video_info(url):
-    """Extract video info with anti-throttling measures"""
-    ydl = yt_dlp.YoutubeDL({
+    """Extract video info with enhanced options"""
+    ydl_opts = {
         'quiet': True,
         'no_warnings': True,
         'extract_flat': True,
         'cookiefile': COOKIES_FILE if os.path.exists(COOKIES_FILE) else None,
+        'format': 'best',
+        'nocheckcertificate': True,
+        'ignoreerrors': False,
+        'no_color': True,
+        'noprogress': True,
+        'allow_unplayable_formats': False,
         'extractor_args': {
             'youtube': {
-                'skip': ['authwall', 'nsig'],
-                'throttled_ratelimit': 1000000
+                'skip': ['dash', 'hls'],
+                'player_skip': ['js', 'configs', 'webpage']
             }
         },
+        'socket_timeout': 30,
+        'retries': 5,
         'user_agent': get_random_user_agent(),
-        'referer': 'https://www.youtube.com/',
-        'retries': 10
-    })
-    return ydl.extract_info(url, download=False)
+        'referer': 'https://www.youtube.com/'
+    }
+    
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            return ydl.extract_info(url, download=False)
+    except Exception as e:
+        print(f"Error extracting info: {str(e)}")
+        return None
 
 def get_random_user_agent():
     """Rotate user agents to avoid throttling"""
     agents = [
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
     ]
     return random.choice(agents)
 
 def get_format_buttons(formats):
-    """Generate quality selection buttons with throttling-resistant formats"""
+    """Generate quality selection buttons with improved format filtering"""
     buttons = []
     
-    # Prioritize formats less likely to be throttled
-    preferred_formats = [
-        f for f in formats 
-        if f.get('vcodec') == 'avc1'  # H.264 codec
-        and f.get('acodec') != 'none'
-        and f.get('height', 0) <= 1080  # 1080p or lower
-    ]
+    # Filter and sort formats
+    video_formats = []
+    for f in formats:
+        if not f.get('vcodec') or f['vcodec'] == 'none':
+            continue
+        
+        # Skip formats without audio
+        if not f.get('acodec') or f['acodec'] == 'none':
+            continue
+            
+        # Skip formats that are too large
+        if f.get('filesize', 0) > MAX_FILE_SIZE * 1024 * 1024:
+            continue
+            
+        video_formats.append(f)
     
-    # Fallback to other formats if needed
-    if not preferred_formats:
-        preferred_formats = [
-            f for f in formats 
-            if f.get('vcodec') != 'none' 
-            and f.get('acodec') != 'none'
-        ]
+    # Sort by quality (height) and filesize
+    video_formats.sort(key=lambda x: (-x.get('height', 0), x.get('filesize', 0)))
     
-    # Sort by resolution then filesize
-    preferred_formats.sort(
-        key=lambda x: (
-            -x.get('height', 0),
-            x.get('filesize', 0)
-        )
-    )
-    
-    # Create buttons for top formats
-    for fmt in preferred_formats[:5]:
+    # Add video format buttons
+    added_resolutions = set()
+    for fmt in video_formats:
         res = fmt.get('height', '?')
+        
+        # Skip duplicate resolutions
+        if res in added_resolutions:
+            continue
+            
+        added_resolutions.add(res)
         ext = fmt.get('ext', 'mp4')
         size = humanbytes(fmt.get('filesize', 0))
-        buttons.append(
-            [InlineKeyboardButton(
+        
+        buttons.append([
+            InlineKeyboardButton(
                 f"🎬 {res}p ({ext.upper()}) - {size}",
                 callback_data=f"dl_{fmt['format_id']}"
-            )]
-        )
+            )
+        ])
+        
+        # Limit to top 4 quality options
+        if len(buttons) >= 4:
+            break
     
     # Add audio-only option
-    audio_format = next(
-        (f for f in formats if 
-         f.get('vcodec') == 'none' and 
-         f.get('acodec') != 'none'),
-        None
-    )
-    if audio_format:
-        buttons.append(
-            [InlineKeyboardButton(
-                f"🔊 Audio Only ({audio_format['ext']})",
-                callback_data=f"dl_{audio_format['format_id']}"
-            )]
-        )
+    audio_formats = [f for f in formats if f.get('vcodec') == 'none' and f.get('acodec') != 'none']
+    if audio_formats:
+        best_audio = max(audio_formats, key=lambda x: x.get('abr', 0))
+        buttons.append([
+            InlineKeyboardButton(
+                f"🔊 Audio Only ({best_audio['ext']}) - {humanbytes(best_audio.get('filesize', 0))}",
+                callback_data=f"dl_{best_audio['format_id']}"
+            )
+        ])
     
     return InlineKeyboardMarkup(buttons)
 
@@ -129,10 +145,11 @@ async def start(_, msg: Message):
         "🎥 YouTube Video Downloader\n\n"
         "Send me a YouTube link and I'll download it for you!\n\n"
         "⚡ Features:\n"
-        "- Quality selection\n"
-        "- Throttling-resistant downloads\n"
-        "- Up to 2GB files\n\n"
-        "⚠️ Note: Age-restricted videos require cookies.txt",
+        "- Multiple quality options\n"
+        "- Fast downloads\n"
+        "- Up to 2GB files\n"
+        "- Audio extraction\n\n"
+        "⚠️ Note: Some videos may require cookies.txt for age-restricted content",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("❓ Help", callback_data="help")]
         ])
@@ -151,63 +168,125 @@ async def download_callback(_, query: CallbackQuery):
             raise ValueError("Invalid YouTube URL")
             
         format_id = query.data.split("_")[1]
-        msg = await query.message.edit_text("📥 Starting download (this may take a while)...")
+        status_msg = await query.message.edit_text("📥 Initializing download...")
         
         ydl_opts = {
             'format': format_id,
             'outtmpl': f'{DOWNLOAD_DIR}/%(title)s.%(ext)s',
             'cookiefile': COOKIES_FILE if os.path.exists(COOKIES_FILE) else None,
-            'extractor_args': {
-                'youtube': {
-                    'skip': ['authwall', 'nsig'],
-                    'throttled_ratelimit': 1000000
-                }
-            },
+            'nocheckcertificate': True,
+            'ignoreerrors': False,
+            'no_color': True,
+            'noprogress': True,
             'noplaylist': True,
-            'quiet': True,
             'max_filesize': MAX_FILE_SIZE * 1024 * 1024,
             'merge_output_format': 'mp4',
+            'socket_timeout': 30,
+            'retries': 5,
+            'fragment_retries': 5,
+            'extractor_retries': 5,
             'user_agent': get_random_user_agent(),
             'referer': 'https://www.youtube.com/',
-            'retries': 10,
-            'throttledratelimit': 1000000,
-            'ignoreerrors': True
+            'extractor_args': {
+                'youtube': {
+                    'skip': ['dash', 'hls'],
+                    'player_skip': ['js', 'configs', 'webpage']
+                }
+            },
+            'progress_hooks': [
+                lambda d: handle_progress(d, status_msg) if d['status'] == 'downloading' else None
+            ]
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             video_path = ydl.prepare_filename(info)
             
+            if not os.path.exists(video_path):
+                raise ValueError("Download failed - file not found")
+            
             file_size = os.path.getsize(video_path)
             if file_size > MAX_FILE_SIZE * 1024 * 1024:
                 os.remove(video_path)
-                return await msg.edit_text("❌ File too large for Telegram")
+                return await status_msg.edit_text("❌ File too large for Telegram (max 2GB)")
             
-            await msg.edit_text("📤 Uploading to Telegram...")
+            await status_msg.edit_text("📤 Uploading to Telegram...")
+            
+            duration = info.get('duration')
+            thumb = None
+            if info.get('thumbnail'):
+                try:
+                    thumb = await bot.download_media(info['thumbnail'])
+                except:
+                    pass
+            
             await query.message.reply_video(
                 video_path,
-                caption=f"🎬 {info.get('title', 'Untitled')}\n"
-                        f"🖥️ Quality: {format_id}\n"
+                caption=f"🎬 {info.get('title', 'Video')}\n"
+                        f"👤 {info.get('uploader', 'Unknown')}\n"
+                        f"⚡ Quality: {info.get('format_note', format_id)}\n"
                         f"📊 Size: {humanbytes(file_size)}",
+                duration=duration,
+                thumb=thumb,
                 supports_streaming=True
             )
-            await msg.delete()
+            
+            await status_msg.delete()
+            
+            # Cleanup
+            if thumb:
+                try:
+                    os.remove(thumb)
+                except:
+                    pass
             
     except DownloadError as e:
-        await query.message.reply_text(
-            "❌ Download failed due to YouTube restrictions\n\n"
-            "Try:\n"
-            "1. Different quality option\n"
-            "2. Wait a few minutes\n"
-            "3. Use cookies.txt for age-restricted videos"
-        )
+        error_msg = str(e)
+        if "Video unavailable" in error_msg:
+            await status_msg.edit_text("❌ This video is unavailable or private")
+        elif "Sign in" in error_msg:
+            await status_msg.edit_text(
+                "❌ This video requires authentication\n\n"
+                "Please provide a valid cookies.txt file"
+            )
+        else:
+            await status_msg.edit_text(
+                "❌ Download failed\n\n"
+                "Possible reasons:\n"
+                "• Video is age-restricted (need cookies.txt)\n"
+                "• Video is private/unavailable\n"
+                "• Network error\n\n"
+                "Try another quality option or check if the video is accessible"
+            )
     except Exception as e:
-        await query.message.reply_text(f"❌ Error: {str(e)}")
+        await status_msg.edit_text(f"❌ Error: {str(e)}")
     finally:
         if 'video_path' in locals() and os.path.exists(video_path):
-            os.remove(video_path)
+            try:
+                os.remove(video_path)
+            except:
+                pass
+
+async def handle_progress(d, status_msg):
+    """Handle download progress updates"""
+    try:
+        total = d.get('total_bytes', 0) or d.get('total_bytes_estimate', 0)
+        downloaded = d.get('downloaded_bytes', 0)
+        
+        if total > 0:
+            percentage = (downloaded / total) * 100
+            speed = d.get('speed', 0)
+            if speed:
+                eta = (total - downloaded) / speed
+                await status_msg.edit_text(
+                    f"📥 Downloading: {percentage:.1f}%\n"
+                    f"⚡ Speed: {humanbytes(speed)}/s\n"
+                    f"⏱️ ETA: {time.strftime('%M:%S', time.gmtime(eta))}"
+                )
+    except:
+        pass  # Ignore progress update errors
 
 # ---------------------------- RUN BOT ----------------------------
 if __name__ == "__main__":
-    print("⚡ Bot is running with enhanced anti-throttling...")
+    print("⚡ Bot is running with enhanced download capabilities...")
     bot.run()
