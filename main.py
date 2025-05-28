@@ -6,6 +6,7 @@ import os
 API_ID = 7813390
 API_HASH = "1faadd9cc60374bca1e88c2f44e3ee2f"
 BOT_TOKEN = "7744174417:AAHgvYYmf2h-YkupR4gXhvqhrU7t6ItxvjE"
+
 # Create downloads directory if not exists
 if not os.path.exists("downloads"):
     os.makedirs("downloads")
@@ -40,3 +41,7 @@ async def download_yt(_, msg):
         os.remove(video_path)
 
     except Exception as e:
+        await msg.reply_text(f"❌ Error: {e}")
+
+# ---------------------------- BOT RUN ----------------------------
+bot.run()
