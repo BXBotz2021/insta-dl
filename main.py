@@ -8,7 +8,7 @@ from yt_dlp.utils import DownloadError
 # ---------------------------- CONFIG ----------------------------
 API_ID = 7813390
 API_HASH = "1faadd9cc60374bca1e88c2f44e3ee2f"
-BOT_TOKEN = "7744174417:AAHgvYYmf2h-YkupR4gXhvqhrU7t6ItxvjE"
+BOT_TOKEN = "8132280304:AAHK129IwpEdLgHH1ORN4DbeHazBd0mtkE0"
 MAX_FILE_SIZE = 2000  # 2GB in MB (Telegram limit)
 
 # Create downloads directory if not exists
