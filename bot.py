@@ -37,52 +37,83 @@ def humanbytes(size):
     return f"{size:.2f} {units[i]}"
 
 def get_video_info(url):
-    """Extract video info with enhanced options"""
+    """Extract video info with latest yt-dlp configuration"""
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
-        'extract_flat': False,  # Changed to False to get full video info
+        'extract_flat': False,
         'cookiefile': COOKIES_FILE if os.path.exists(COOKIES_FILE) else None,
-        'format': 'best',
+        'format': 'bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4] / bv*+ba/b',  # Updated format selection
         'nocheckcertificate': True,
         'ignoreerrors': False,
         'no_color': True,
         'noprogress': True,
         'allow_unplayable_formats': False,
-        'youtube_include_dash_manifest': False,
+        'youtube_include_dash_manifest': True,  # Enable DASH manifests
         'geo_bypass': True,
+        'geo_bypass_country': 'US',
         'extractor_args': {
             'youtube': {
-                'skip': ['dash', 'hls'],
-                'player_skip': ['js', 'configs', 'webpage']
+                'player_skip': ['js', 'configs', 'webpage'],
+                'include_live_dash': '1',  # Include live dash formats
+                'skip_webpage': '1'  # Skip webpage download for faster extraction
             }
         },
-        'socket_timeout': 30,
-        'retries': 3,
+        'socket_timeout': 10,
+        'retries': 5,
+        'file_access_retries': 5,
+        'fragment_retries': 5,
+        'retry_sleep_functions': {'http': lambda n: 3},  # Sleep 3 seconds between retries
         'user_agent': get_random_user_agent(),
-        'referer': 'https://www.youtube.com/',
         'http_headers': {
             'User-Agent': get_random_user_agent(),
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-us,en;q=0.5',
-            'Sec-Fetch-Mode': 'navigate'
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'DNT': '1'
         }
     }
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
+                # First try with default options
                 info = ydl.extract_info(url, download=False)
                 if info is None:
                     raise Exception("Failed to extract video information")
                 return info
             except yt_dlp.utils.DownloadError as e:
-                if "Sign in" in str(e):
-                    raise Exception("This video requires authentication. Please provide a valid cookies.txt file.")
-                elif "Private video" in str(e):
+                error_str = str(e).lower()
+                if any(x in error_str for x in ["copyright", "removed", "not available"]):
+                    raise Exception("This video has been removed or is not available.")
+                elif "private" in error_str:
                     raise Exception("This video is private.")
-                elif "This video is not available" in str(e):
-                    raise Exception("This video is not available in your region or has been removed.")
+                elif any(x in error_str for x in ["sign in", "age", "restricted"]):
+                    # Try again with age-gate bypass
+                    ydl_opts.update({
+                        'age_limit': 21,
+                        'cookiefile': None,  # Don't use cookies for this attempt
+                        'extractor_args': {
+                            'youtube': {
+                                'player_skip': [],  # Don't skip anything
+                                'include_live_dash': '1',
+                                'skip_webpage': '0'  # Download webpage for this attempt
+                            }
+                        }
+                    })
+                    try:
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl2:
+                            info = ydl2.extract_info(url, download=False)
+                            if info:
+                                return info
+                    except:
+                        raise Exception("This video requires authentication. Please provide a valid cookies.txt file.")
                 else:
                     raise Exception(f"Download error: {str(e)}")
             except Exception as e:
@@ -178,7 +209,7 @@ async def start(_, msg: Message):
         ])
     )
 
-@bot.on_message(filters.regex(r'(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/)[\w-]+'))
+@bot.on_message(filters.regex(r'(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/|youtube\.com/live/)[\w-]+'))
 async def youtube_link_handler(_, message: Message):
     """Handle YouTube video links"""
     try:
@@ -192,9 +223,14 @@ async def youtube_link_handler(_, message: Message):
                 "Possible reasons:\n"
                 "• Video is private\n"
                 "• Video is age-restricted (need cookies.txt)\n"
+                "• Video has been removed\n"
                 "• Video is not available in your region\n"
                 "• Invalid or broken URL\n\n"
-                "Please check the URL and try again."
+                "Try these solutions:\n"
+                "1. Check if the video exists and is public\n"
+                "2. For age-restricted videos, provide cookies.txt\n"
+                "3. Try using a VPN if video is region-locked\n"
+                "4. Make sure you're using a valid YouTube URL"
             )
             return await status_msg.edit_text(error_text)
         
@@ -206,6 +242,15 @@ async def youtube_link_handler(_, message: Message):
         if not formats:
             return await status_msg.edit_text("❌ No downloadable formats found for this video.")
         
+        # Filter out formats without filesize info
+        formats = [f for f in formats if f.get('filesize') is not None]
+        
+        if not formats:
+            return await status_msg.edit_text(
+                "❌ Could not determine video size.\n"
+                "Please try again or try another video."
+            )
+        
         await status_msg.edit_text(
             f"🎬 {title}\n"
             f"👤 {uploader}\n"
@@ -215,10 +260,14 @@ async def youtube_link_handler(_, message: Message):
         )
     except Exception as e:
         error_msg = str(e)
-        if "cookies.txt" in error_msg:
+        if "cookies.txt" in error_msg.lower():
             await message.reply_text(
-                "❌ This video requires authentication.\n"
-                "Please provide a valid cookies.txt file to download age-restricted content."
+                "❌ This video requires authentication.\n\n"
+                "To download age-restricted videos:\n"
+                "1. Log in to YouTube in your browser\n"
+                "2. Install a cookie exporter extension\n"
+                "3. Export cookies as cookies.txt\n"
+                "4. Place cookies.txt in the bot's directory"
             )
         else:
             await message.reply_text(f"❌ Error: {error_msg}")
