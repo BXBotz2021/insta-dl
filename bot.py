@@ -8,7 +8,7 @@ from yt_dlp.utils import DownloadError
 # ---------------------------- CONFIG ----------------------------
 API_ID = 7813390  # Replace with your API_ID
 API_HASH = "1faadd9cc60374bca1e88c2f44e3ee2f"  # Replace with your API_HASH
-BOT_TOKEN = "7744174417:AAHgvYYmf2h-YkupR4gXhvqhrU7t6ItxvjE"  # Replace with your bot token
+BOT_TOKEN = "8132280304:AAHK129IwpEdLgHH1ORN4DbeHazBd0mtkE0"  # Replace with your bot token
 
 MAX_FILE_SIZE = 2000  # 2GB in MB (Telegram limit)
 COOKIES_FILE = "cookies.txt"  # Make sure this exists in your bot's directory
