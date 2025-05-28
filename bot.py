@@ -155,6 +155,80 @@ async def start(_, msg: Message):
         ])
     )
 
+@bot.on_message(filters.regex(r'(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/)[\w-]+'))
+async def youtube_link_handler(_, message: Message):
+    """Handle YouTube video links"""
+    try:
+        url = message.text.strip()
+        status_msg = await message.reply_text("🔍 Fetching video information...")
+        
+        info = get_video_info(url)
+        if not info:
+            return await status_msg.edit_text("❌ Failed to fetch video information. Please check the URL and try again.")
+        
+        title = info.get('title', 'Video')
+        duration = info.get('duration')
+        uploader = info.get('uploader', 'Unknown')
+        
+        formats = info.get('formats', [])
+        if not formats:
+            return await status_msg.edit_text("❌ No downloadable formats found for this video.")
+        
+        await status_msg.edit_text(
+            f"🎬 {title}\n"
+            f"👤 {uploader}\n"
+            f"⏱️ Duration: {time.strftime('%H:%M:%S', time.gmtime(duration)) if duration else 'Unknown'}\n\n"
+            "Select video quality:",
+            reply_markup=get_format_buttons(formats)
+        )
+    except Exception as e:
+        await message.reply_text(f"❌ Error: {str(e)}")
+
+@bot.on_callback_query(filters.regex("^help$"))
+async def help_callback(_, query: CallbackQuery):
+    """Handle help button callback"""
+    await query.answer()
+    await query.message.edit_text(
+        "📖 Help & Instructions\n\n"
+        "1️⃣ Send a YouTube video link\n"
+        "2️⃣ Bot will show available qualities\n"
+        "3️⃣ Select your preferred quality\n"
+        "4️⃣ Wait for download & upload\n\n"
+        "📝 Supported Links:\n"
+        "• Regular YouTube videos\n"
+        "• YouTube Shorts\n"
+        "• Age-restricted videos (requires cookies.txt)\n\n"
+        "⚠️ Limitations:\n"
+        "• Max file size: 2GB\n"
+        "• One video at a time\n"
+        "• No playlists\n\n"
+        "❓ Having issues? Try:\n"
+        "• Check if video is public\n"
+        "• Try different quality\n"
+        "• For age-restricted videos, provide cookies.txt",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 Back", callback_data="back_to_start")]
+        ])
+    )
+
+@bot.on_callback_query(filters.regex("^back_to_start$"))
+async def back_to_start(_, query: CallbackQuery):
+    """Handle back button to return to start message"""
+    await query.answer()
+    await query.message.edit_text(
+        "🎥 YouTube Video Downloader\n\n"
+        "Send me a YouTube link and I'll download it for you!\n\n"
+        "⚡ Features:\n"
+        "- Multiple quality options\n"
+        "- Fast downloads\n"
+        "- Up to 2GB files\n"
+        "- Audio extraction\n\n"
+        "⚠️ Note: Some videos may require cookies.txt for age-restricted content",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("❓ Help", callback_data="help")]
+        ])
+    )
+
 @bot.on_callback_query(filters.regex("^dl_"))
 async def download_callback(_, query: CallbackQuery):
     await query.answer()
