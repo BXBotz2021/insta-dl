@@ -36,7 +36,7 @@ def humanbytes(size):
     return f"{size:.2f} {units[i]}"
 
 def get_video_info(url):
-    """Extract video info with advanced bypass methods"""
+    """Extract video info with innertube client"""
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
@@ -47,39 +47,29 @@ def get_video_info(url):
         'no_color': True,
         'noprogress': True,
         'allow_unplayable_formats': False,
-        'youtube_include_dash_manifest': True,
-        'geo_bypass': True,
-        'geo_bypass_country': 'US',
-        'age_limit': 21,
-        'writesubtitles': False,
-        'embedthumbnail': False,
+        'youtube_include_dash_manifest': False,
         'extractor_retries': 3,
         'file_access_retries': 3,
         'fragment_retries': 3,
         'skip_download': True,
         'extractor_args': {
             'youtube': {
-                'player_skip': [],
-                'skip_webpage': '0',
-                'player_client': 'android',
-                'player_skip_sig_delta': True,
-                'formats': 'incomplete'
+                'skip': ['webpage', 'dash', 'hls'],
+                'player_client': 'TVHTML5',
+                'player_skip': ['configs', 'webpage'],
+                'formats': 'none',
+                'client_type': 'TVHTML5_SIMPLY_EMBEDDED_PLAYER'
             }
         },
-        'socket_timeout': 10,
+        'socket_timeout': 15,
         'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 11; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; Xbox; Xbox One) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edge/44.18363.8131',
+            'Accept': '*/*',
+            'Accept-Language': 'en-US',
             'Accept-Encoding': 'gzip, deflate',
-            'DNT': '1',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Sec-Fetch-User': '?1',
-            'TE': 'trailers'
+            'Origin': 'https://www.youtube.com',
+            'Referer': 'https://www.youtube.com/tv',
+            'Connection': 'keep-alive'
         }
     }
     
@@ -97,23 +87,25 @@ def get_video_info(url):
                 elif "private" in error_str:
                     raise Exception("This video is private.")
                 elif any(x in error_str for x in ["sign in", "age", "restricted", "confirm you're not a bot"]):
-                    # Try alternative method with different client
+                    # Try alternative method with ANDROID client
                     ydl_opts.update({
                         'extractor_args': {
                             'youtube': {
-                                'player_client': 'ios',
-                                'player_skip': [],
-                                'skip_webpage': '0',
-                                'formats': 'incomplete'
+                                'skip': ['webpage'],
+                                'player_client': 'ANDROID',
+                                'player_skip': ['configs', 'webpage'],
+                                'formats': 'none',
+                                'client_type': 'ANDROID'
                             }
                         },
                         'http_headers': {
-                            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_6_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6 Mobile/15E148 Safari/604.1',
-                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                            'Accept-Language': 'en-us',
-                            'Accept-Encoding': 'gzip, deflate',
-                            'Connection': 'keep-alive',
-                            'Upgrade-Insecure-Requests': '1'
+                            'User-Agent': 'com.google.android.youtube/17.31.35 (Linux; U; Android 11; SM-G991B Build/RP1A.200720.012) gzip',
+                            'Accept': '*/*',
+                            'Accept-Language': 'en-US,en;q=0.5',
+                            'X-YouTube-Client-Name': '3',
+                            'X-YouTube-Client-Version': '17.31.35',
+                            'Origin': 'https://www.youtube.com',
+                            'Connection': 'keep-alive'
                         }
                     })
                     try:
@@ -122,23 +114,25 @@ def get_video_info(url):
                             if info:
                                 return info
                     except:
-                        # Try one more time with web client
+                        # Try one more time with IOS client
                         ydl_opts.update({
                             'extractor_args': {
                                 'youtube': {
-                                    'player_client': 'web',
-                                    'player_skip': [],
-                                    'skip_webpage': '0',
-                                    'formats': 'incomplete'
+                                    'skip': ['webpage'],
+                                    'player_client': 'IOS',
+                                    'player_skip': ['configs', 'webpage'],
+                                    'formats': 'none',
+                                    'client_type': 'IOS'
                                 }
                             },
                             'http_headers': {
-                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-                                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                                'Accept-Language': 'en-US,en;q=0.9',
-                                'Accept-Encoding': 'gzip, deflate',
-                                'Connection': 'keep-alive',
-                                'Upgrade-Insecure-Requests': '1'
+                                'User-Agent': 'YouTube/17.31.4 (iPhone14,3; U; CPU iOS 15_0 like Mac OS X)',
+                                'Accept': '*/*',
+                                'Accept-Language': 'en-US,en;q=0.5',
+                                'X-YouTube-Client-Name': '5',
+                                'X-YouTube-Client-Version': '17.31.4',
+                                'Origin': 'https://www.youtube.com',
+                                'Connection': 'keep-alive'
                             }
                         })
                         try:
@@ -355,25 +349,27 @@ async def download_callback(_, query: CallbackQuery):
             'noplaylist': True,
             'max_filesize': MAX_FILE_SIZE * 1024 * 1024,
             'merge_output_format': 'mp4',
-            'socket_timeout': 10,
+            'socket_timeout': 15,
             'retries': 5,
             'fragment_retries': 5,
             'extractor_retries': 5,
             'extractor_args': {
                 'youtube': {
-                    'player_skip': [],
-                    'skip_webpage': '0',
-                    'player_client': 'android',
-                    'formats': 'incomplete'
+                    'skip': ['webpage', 'dash', 'hls'],
+                    'player_client': 'TVHTML5',
+                    'player_skip': ['configs', 'webpage'],
+                    'formats': 'none',
+                    'client_type': 'TVHTML5_SIMPLY_EMBEDDED_PLAYER'
                 }
             },
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Linux; Android 11; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; Xbox; Xbox One) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edge/44.18363.8131',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US',
                 'Accept-Encoding': 'gzip, deflate',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1'
+                'Origin': 'https://www.youtube.com',
+                'Referer': 'https://www.youtube.com/tv',
+                'Connection': 'keep-alive'
             },
             'progress_hooks': [
                 lambda d: handle_progress(d, status_msg) if d['status'] == 'downloading' else None
