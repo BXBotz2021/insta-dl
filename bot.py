@@ -60,24 +60,26 @@ def get_video_info(url):
         'extractor_args': {
             'youtube': {
                 'player_skip': [],
-                'include_live_dash': '1',
                 'skip_webpage': '0',
                 'player_client': 'android',
-                'player_skip_sig_delta': True
+                'player_skip_sig_delta': True,
+                'formats': 'incomplete'
             }
         },
         'socket_timeout': 10,
-        'user_agent': 'com.google.android.youtube/17.31.35 (Linux; U; Android 11)',
         'http_headers': {
-            'User-Agent': 'com.google.android.youtube/17.31.35 (Linux; U; Android 11)',
-            'Accept': '*/*',
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 11; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.5',
             'Accept-Encoding': 'gzip, deflate',
-            'Origin': 'https://www.youtube.com',
+            'DNT': '1',
             'Connection': 'keep-alive',
-            'Sec-Fetch-Dest': 'empty',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Site': 'same-origin',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'TE': 'trailers'
         }
     }
     
@@ -94,18 +96,25 @@ def get_video_info(url):
                     raise Exception("This video has been removed or is not available.")
                 elif "private" in error_str:
                     raise Exception("This video is private.")
-                elif any(x in error_str for x in ["sign in", "age", "restricted"]):
+                elif any(x in error_str for x in ["sign in", "age", "restricted", "confirm you're not a bot"]):
                     # Try alternative method with different client
                     ydl_opts.update({
                         'extractor_args': {
                             'youtube': {
                                 'player_client': 'ios',
                                 'player_skip': [],
-                                'include_live_dash': '1',
-                                'skip_webpage': '0'
+                                'skip_webpage': '0',
+                                'formats': 'incomplete'
                             }
                         },
-                        'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1'
+                        'http_headers': {
+                            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_6_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6 Mobile/15E148 Safari/604.1',
+                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                            'Accept-Language': 'en-us',
+                            'Accept-Encoding': 'gzip, deflate',
+                            'Connection': 'keep-alive',
+                            'Upgrade-Insecure-Requests': '1'
+                        }
                     })
                     try:
                         with yt_dlp.YoutubeDL(ydl_opts) as ydl2:
@@ -113,7 +122,32 @@ def get_video_info(url):
                             if info:
                                 return info
                     except:
-                        raise Exception("Could not bypass video restrictions. Try another video.")
+                        # Try one more time with web client
+                        ydl_opts.update({
+                            'extractor_args': {
+                                'youtube': {
+                                    'player_client': 'web',
+                                    'player_skip': [],
+                                    'skip_webpage': '0',
+                                    'formats': 'incomplete'
+                                }
+                            },
+                            'http_headers': {
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                                'Accept-Language': 'en-US,en;q=0.9',
+                                'Accept-Encoding': 'gzip, deflate',
+                                'Connection': 'keep-alive',
+                                'Upgrade-Insecure-Requests': '1'
+                            }
+                        })
+                        try:
+                            with yt_dlp.YoutubeDL(ydl_opts) as ydl3:
+                                info = ydl3.extract_info(url, download=False)
+                                if info:
+                                    return info
+                        except:
+                            raise Exception("Could not bypass video restrictions. Try another video.")
                 else:
                     raise Exception(f"Download error: {str(e)}")
             except Exception as e:
@@ -325,14 +359,21 @@ async def download_callback(_, query: CallbackQuery):
             'retries': 5,
             'fragment_retries': 5,
             'extractor_retries': 5,
-            'user_agent': 'com.google.android.youtube/17.31.35 (Linux; U; Android 11)',
             'extractor_args': {
                 'youtube': {
                     'player_skip': [],
-                    'include_live_dash': '1',
                     'skip_webpage': '0',
-                    'player_client': 'android'
+                    'player_client': 'android',
+                    'formats': 'incomplete'
                 }
+            },
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 11; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1'
             },
             'progress_hooks': [
                 lambda d: handle_progress(d, status_msg) if d['status'] == 'downloading' else None
