@@ -1,5 +1,6 @@
 import os
 import time
+import random
 from pyrogram import Client, filters
 from pyrogram.types import (
     Message,
@@ -37,36 +38,63 @@ def humanbytes(size):
     return f"{size:.2f} {units[i]}"
 
 def get_video_info(url):
-    """Extract video info without downloading"""
+    """Extract video info with anti-throttling measures"""
     ydl = yt_dlp.YoutubeDL({
         'quiet': True,
         'no_warnings': True,
         'extract_flat': True,
-        'cookiefile': COOKIES_FILE if os.path.exists(COOKIES_FILE) else None
+        'cookiefile': COOKIES_FILE if os.path.exists(COOKIES_FILE) else None,
+        'extractor_args': {
+            'youtube': {
+                'skip': ['authwall', 'nsig'],
+                'throttled_ratelimit': 1000000
+            }
+        },
+        'user_agent': get_random_user_agent(),
+        'referer': 'https://www.youtube.com/',
+        'retries': 10
     })
     return ydl.extract_info(url, download=False)
 
+def get_random_user_agent():
+    """Rotate user agents to avoid throttling"""
+    agents = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+    ]
+    return random.choice(agents)
+
 def get_format_buttons(formats):
-    """Generate quality selection buttons"""
+    """Generate quality selection buttons with throttling-resistant formats"""
     buttons = []
-    # Filter for common video formats
-    video_formats = [
-        f for f in formats if 
-        f.get('vcodec') != 'none' and 
-        f.get('acodec') != 'none' and
-        f.get('filesize') is not None
+    
+    # Prioritize formats less likely to be throttled
+    preferred_formats = [
+        f for f in formats 
+        if f.get('vcodec') == 'avc1'  # H.264 codec
+        and f.get('acodec') != 'none'
+        and f.get('height', 0) <= 1080  # 1080p or lower
     ]
     
+    # Fallback to other formats if needed
+    if not preferred_formats:
+        preferred_formats = [
+            f for f in formats 
+            if f.get('vcodec') != 'none' 
+            and f.get('acodec') != 'none'
+        ]
+    
     # Sort by resolution then filesize
-    video_formats.sort(
+    preferred_formats.sort(
         key=lambda x: (
             -x.get('height', 0),
             x.get('filesize', 0)
         )
     )
     
-    # Create buttons for top 5 formats
-    for fmt in video_formats[:5]:
+    # Create buttons for top formats
+    for fmt in preferred_formats[:5]:
         res = fmt.get('height', '?')
         ext = fmt.get('ext', 'mp4')
         size = humanbytes(fmt.get('filesize', 0))
@@ -102,7 +130,7 @@ async def start(_, msg: Message):
         "Send me a YouTube link and I'll download it for you!\n\n"
         "⚡ Features:\n"
         "- Quality selection\n"
-        "- Fast downloads\n"
+        "- Throttling-resistant downloads\n"
         "- Up to 2GB files\n\n"
         "⚠️ Note: Age-restricted videos require cookies.txt",
         reply_markup=InlineKeyboardMarkup([
@@ -110,62 +138,11 @@ async def start(_, msg: Message):
         ])
     )
 
-@bot.on_callback_query(filters.regex("^help$"))
-async def help_callback(_, query: CallbackQuery):
-    await query.message.edit_text(
-        "📘 Bot Help Guide\n\n"
-        "1. Send any YouTube link\n"
-        "2. Select your preferred quality\n"
-        "3. Wait for download to complete\n\n"
-        "🔧 Troubleshooting:\n"
-        "- For age-restricted videos: Use cookies.txt\n"
-        "- Large videos may take time to upload\n"
-        "- Try different quality if one fails",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Back", callback_data="back_to_start")]
-        ])
-    )
-
-@bot.on_callback_query(filters.regex("^back_to_start$"))
-async def back_to_start(_, query: CallbackQuery):
-    await start(_, query.message)
-
-@bot.on_message(filters.text & ~filters.command(["start", "help"]))
-async def handle_url(_, msg: Message):
-    url = msg.text.strip()
-    
-    if not any(x in url for x in ["youtube.com", "youtu.be"]):
-        return await msg.reply_text("❌ Please send a valid YouTube URL")
-    
-    try:
-        info = get_video_info(url)
-        if not info:
-            return await msg.reply_text("❌ Couldn't fetch video info. Video may be private or unavailable.")
-        
-        if info.get('duration', 0) > 14400:  # 4 hours
-            return await msg.reply_text("❌ Video too long (max 4 hours allowed)")
-        
-        if 'formats' not in info:
-            return await msg.reply_text("❌ Couldn't extract available formats")
-        
-        # Store URL in the message for callback reference
-        await msg.reply_text(
-            f"📹 {info.get('title', 'Untitled')}\n"
-            f"⏱️ Duration: {info.get('duration_string', 'N/A')}\n\n"
-            "Select download quality:",
-            reply_markup=get_format_buttons(info['formats']),
-            reply_to_message_id=msg.id  # This ensures reply_to_message exists
-        )
-        
-    except Exception as e:
-        await msg.reply_text(f"❌ Error: {str(e)}")
-
 @bot.on_callback_query(filters.regex("^dl_"))
 async def download_callback(_, query: CallbackQuery):
     await query.answer()
     
     try:
-        # Safely get the URL from the replied message
         if not query.message.reply_to_message:
             raise ValueError("Original message not found")
             
@@ -174,20 +151,27 @@ async def download_callback(_, query: CallbackQuery):
             raise ValueError("Invalid YouTube URL")
             
         format_id = query.data.split("_")[1]
-        msg = await query.message.edit_text("📥 Starting download...")
+        msg = await query.message.edit_text("📥 Starting download (this may take a while)...")
         
         ydl_opts = {
             'format': format_id,
             'outtmpl': f'{DOWNLOAD_DIR}/%(title)s.%(ext)s',
             'cookiefile': COOKIES_FILE if os.path.exists(COOKIES_FILE) else None,
-            'extractor_args': {'youtube': {'skip': ['authwall']}},
+            'extractor_args': {
+                'youtube': {
+                    'skip': ['authwall', 'nsig'],
+                    'throttled_ratelimit': 1000000
+                }
+            },
             'noplaylist': True,
             'quiet': True,
             'max_filesize': MAX_FILE_SIZE * 1024 * 1024,
             'merge_output_format': 'mp4',
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'user_agent': get_random_user_agent(),
             'referer': 'https://www.youtube.com/',
-            'retries': 10
+            'retries': 10,
+            'throttledratelimit': 1000000,
+            'ignoreerrors': True
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -210,7 +194,13 @@ async def download_callback(_, query: CallbackQuery):
             await msg.delete()
             
     except DownloadError as e:
-        await query.message.reply_text(f"❌ Download failed: {str(e)}")
+        await query.message.reply_text(
+            "❌ Download failed due to YouTube restrictions\n\n"
+            "Try:\n"
+            "1. Different quality option\n"
+            "2. Wait a few minutes\n"
+            "3. Use cookies.txt for age-restricted videos"
+        )
     except Exception as e:
         await query.message.reply_text(f"❌ Error: {str(e)}")
     finally:
@@ -219,5 +209,5 @@ async def download_callback(_, query: CallbackQuery):
 
 # ---------------------------- RUN BOT ----------------------------
 if __name__ == "__main__":
-    print("⚡ Bot is running...")
+    print("⚡ Bot is running with enhanced anti-throttling...")
     bot.run()
